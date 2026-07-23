@@ -1,0 +1,8 @@
+{
+  "format_version": 1,
+  "fork": "kombiz/CLI-Anything",
+  "upstream": "HKUDS/CLI-Anything",
+  "integration_branch": "personal/main",
+  "description": "Authoritative inventory of fork-owned CLI harness paths. An empty list means this fork currently contains no personal CLIs.",
+  "clis": []
+}

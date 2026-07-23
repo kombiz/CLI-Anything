@@ -17,6 +17,8 @@
 !/CONTRIBUTING.md
 !/SECURITY.md
 !/FIX_NOTES.md
+!/FORK_POLICY.md
+!/PERSONAL_CLIS.json
 !/assets/
 !/.pi-extension/
 /.pi-extension/cli-anything/node_modules
@@ -343,3 +345,27 @@ assets/gen_typing_gif.py
 !/jumpserver/
 !/jumpserver/agent-harness/
 !/cli_anything/jumpserver/
+
+# ============================================================
+# Personal fork safety
+#
+# Personal CLI harnesses still use the upstream-compatible root layout:
+#   <software>/agent-harness/
+#
+# Add each personal software directory to Steps 4-6 above before committing
+# its harness. Keep machine-local data in one of the ignored locations below.
+# These rules are defense in depth; always inspect `git diff --cached`.
+# ============================================================
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.template
+**/.local/
+**/private/
+**/.venv/
+**/*credentials*.json
+**/*secrets*.json
+**/*.pem
+**/*.key
+**/*.sqlite
+**/*.sqlite3
