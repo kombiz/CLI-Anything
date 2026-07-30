@@ -4,5 +4,18 @@
   "upstream": "HKUDS/CLI-Anything",
   "integration_branch": "personal/main",
   "description": "Authoritative inventory of fork-owned CLI harness paths. An empty list means this fork currently contains no personal CLIs.",
-  "clis": []
+  "clis": [
+    {
+      "name": "buzz",
+      "display_name": "Buzz",
+      "target": "https://github.com/block/buzz",
+      "python_package": "cli_anything.buzz",
+      "entry_point": "cli-anything-buzz",
+      "paths": [
+        "buzz/agent-harness/**",
+        "skills/cli-anything-buzz/**"
+      ],
+      "notes": "Fork-owned wrapper around Buzz's native Rust CLI. Credentials remain environment-only; tests use synthetic local persona packs."
+    }
+  ]
 }
