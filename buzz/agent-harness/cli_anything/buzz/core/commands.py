@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from typing import Any, Iterable, Sequence
+from urllib.parse import urlparse
 
 
 NATIVE_GROUPS = (
@@ -29,7 +30,7 @@ NATIVE_GROUPS = (
 )
 
 GROUP_HELP = {
-    "agents": "Plan or approve Desktop-managed agents and send owner-reviewed drafts.",
+    "agents": "Draft owner-reviewed agent creation and updates.",
     "messages": "Send, read, search, and manage messages.",
     "channels": "Create, configure, and manage channels.",
     "canvas": "Get and set channel canvas documents.",
@@ -56,12 +57,24 @@ SECRET_FLAGS = ("--private-key", "--auth-tag")
 
 
 def ensure_no_secret_args(args: Sequence[str]) -> None:
-    for token in args:
+    for index, token in enumerate(args):
         if any(token == flag or token.startswith(f"{flag}=") for flag in SECRET_FLAGS):
             raise ValueError(
                 f"{token.split('=', 1)[0]} is blocked by CLI-Anything Buzz; "
                 "use BUZZ_PRIVATE_KEY or BUZZ_AUTH_TAG in the environment"
             )
+        relay_value: str | None = None
+        if token == "--relay" and index + 1 < len(args):
+            relay_value = args[index + 1]
+        elif token.startswith("--relay="):
+            relay_value = token.split("=", 1)[1]
+        if relay_value:
+            parsed = urlparse(relay_value)
+            if parsed.username or parsed.password:
+                raise ValueError(
+                    "--relay URLs with embedded credentials are blocked by "
+                    "CLI-Anything Buzz"
+                )
 
 
 def redact_args(args: Iterable[str]) -> list[str]:

@@ -4,9 +4,11 @@ from __future__ import annotations
 import json
 import os
 import shlex
+import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence
 
 import click
 
@@ -28,6 +30,7 @@ from cli_anything.buzz.core.session import (
     validate_relay_url,
 )
 from cli_anything.buzz.utils.buzz_backend import (
+    DEFAULT_BUZZ_TIMEOUT,
     check_relay_liveness,
     find_buzz,
     native_command_inventory,
@@ -51,6 +54,9 @@ class AppContext:
     relay_url: str | None
     output_format: str
     buzz_binary: str | None
+    timeout: float
+    requested_relay: str | None = None
+    requested_format: str | None = None
 
 
 def _json_echo(value: Any, *, err: bool = False) -> None:
@@ -99,6 +105,20 @@ def _native_executable(app: AppContext) -> str:
     raise AssertionError("unreachable")
 
 
+def _native_inventory(app: AppContext, executable: str) -> tuple[str, list[str]]:
+    try:
+        return native_command_inventory(executable, timeout=app.timeout)
+    except subprocess.TimeoutExpired:
+        _fail(
+            app,
+            f"Buzz command inventory timed out after {app.timeout:g} seconds",
+            exit_code=4,
+        )
+    except RuntimeError as exc:
+        _fail(app, str(exc), exit_code=4)
+    raise AssertionError("unreachable")
+
+
 def _run_native_args(app: AppContext, native_args: Sequence[str]) -> None:
     try:
         ensure_no_secret_args(native_args)
@@ -111,7 +131,18 @@ def _run_native_args(app: AppContext, native_args: Sequence[str]) -> None:
         _emit_value(app, payload, human=human)
         return
     try:
-        result = run_buzz(native_args, executable=executable)
+        result = run_buzz(
+            native_args,
+            executable=executable,
+            timeout=app.timeout,
+        )
+    except subprocess.TimeoutExpired:
+        _fail(
+            app,
+            f"Buzz command timed out after {app.timeout:g} seconds",
+            exit_code=4,
+        )
+        return
     except Exception as exc:
         _fail(app, f"Failed to start Buzz: {exc}", exit_code=4)
         return
@@ -178,6 +209,14 @@ def _run_native_group(app: AppContext, group: str, args: Sequence[str]) -> None:
     envvar="CLI_ANYTHING_BUZZ_BINARY",
     hidden=True,
 )
+@click.option(
+    "--timeout",
+    type=click.FloatRange(min=0, min_open=True),
+    default=DEFAULT_BUZZ_TIMEOUT,
+    show_default=True,
+    envvar="CLI_ANYTHING_BUZZ_TIMEOUT",
+    help="Maximum seconds to wait for each native Buzz command.",
+)
 @click.pass_context
 def cli(
     ctx: click.Context,
@@ -187,6 +226,7 @@ def cli(
     requested_format: str | None,
     dry_run: bool,
     buzz_binary: Path | None,
+    timeout: float,
 ) -> None:
     """Operate Buzz through its real native agent CLI.
 
@@ -207,7 +247,7 @@ def cli(
             requested_format,
             state,
         )
-    except ValueError as exc:
+    except (OSError, ValueError) as exc:
         temp = AppContext(
             use_json=use_json,
             dry_run=dry_run,
@@ -216,6 +256,7 @@ def cli(
             relay_url=None,
             output_format="json",
             buzz_binary=str(buzz_binary) if buzz_binary else None,
+            timeout=timeout,
         )
         _fail(temp, str(exc), exit_code=1)
         return
@@ -227,6 +268,9 @@ def cli(
         relay_url=relay_url,
         output_format=output_format,
         buzz_binary=str(buzz_binary) if buzz_binary else None,
+        timeout=timeout,
+        requested_relay=relay,
+        requested_format=requested_format,
     )
     if ctx.invoked_subcommand is None:
         ctx.invoke(repl)
@@ -238,16 +282,14 @@ def backend_group() -> None:
 
 
 @backend_group.command("status")
-@click.option("--check-relay", is_flag=True, help="Probe the relay's _liveness endpoint.")
+@click.option(
+    "--check-relay", is_flag=True, help="Probe the relay's _liveness endpoint."
+)
 @click.pass_obj
 def backend_status(app: AppContext, check_relay: bool) -> None:
     """Show backend, credential-presence, and relay status."""
     executable = _native_executable(app)
-    try:
-        _, commands = native_command_inventory(executable)
-    except RuntimeError as exc:
-        _fail(app, str(exc), exit_code=4)
-        return
+    _, commands = _native_inventory(app, executable)
     effective_relay = app.relay_url or NATIVE_DEFAULT_RELAY
     data: dict[str, Any] = {
         "ok": True,
@@ -270,11 +312,7 @@ def backend_status(app: AppContext, check_relay: bool) -> None:
 def backend_commands(app: AppContext) -> None:
     """List native root commands and compare wrapper coverage."""
     executable = _native_executable(app)
-    try:
-        _, native = native_command_inventory(executable)
-    except RuntimeError as exc:
-        _fail(app, str(exc), exit_code=4)
-        return
+    _, native = _native_inventory(app, executable)
     wrapped = list(NATIVE_GROUPS)
     data = {
         "ok": True,
@@ -345,10 +383,27 @@ def _save_or_plan(app: AppContext, action: str) -> None:
         }
         _emit_value(app, data, human=f"Would {action}: {app.state.snapshot()}")
         return
-    app.session_store.save(app.state)
     data = _session_data(app)
     data["action"] = action
     _emit_value(app, data)
+
+
+def _change_session(
+    app: AppContext,
+    action: str,
+    operation: Callable[[bool], None],
+) -> None:
+    try:
+        operation(not app.dry_run)
+        app.relay_url, app.output_format = resolve_settings(
+            app.requested_relay,
+            app.requested_format,
+            app.state,
+        )
+    except (OSError, ValueError) as exc:
+        _fail(app, f"Could not {action}: {exc}")
+        return
+    _save_or_plan(app, action)
 
 
 @session_group.command("set-relay")
@@ -356,14 +411,15 @@ def _save_or_plan(app: AppContext, action: str) -> None:
 @click.pass_obj
 def session_set_relay(app: AppContext, relay_url: str) -> None:
     """Save a relay URL without storing credentials."""
-    try:
-        relay_url = validate_relay_url(relay_url)
-        app.session_store.mutate(app.state, relay_url=relay_url)
-    except ValueError as exc:
-        _fail(app, str(exc))
-        return
-    app.relay_url = relay_url
-    _save_or_plan(app, "set relay")
+    _change_session(
+        app,
+        "set relay",
+        lambda persist: app.session_store.mutate(
+            app.state,
+            relay_url=validate_relay_url(relay_url),
+            persist=persist,
+        ),
+    )
 
 
 @session_group.command("set-format")
@@ -371,44 +427,48 @@ def session_set_relay(app: AppContext, relay_url: str) -> None:
 @click.pass_obj
 def session_set_format(app: AppContext, output_format: str) -> None:
     """Save the native Buzz read format."""
-    app.session_store.mutate(app.state, output_format=output_format)
-    app.output_format = output_format
-    _save_or_plan(app, "set format")
+    _change_session(
+        app,
+        "set format",
+        lambda persist: app.session_store.mutate(
+            app.state,
+            output_format=output_format,
+            persist=persist,
+        ),
+    )
 
 
 @session_group.command("undo")
 @click.pass_obj
 def session_undo(app: AppContext) -> None:
     """Undo the last local preference change."""
-    try:
-        app.session_store.undo(app.state)
-    except ValueError as exc:
-        _fail(app, str(exc))
-        return
-    app.relay_url, app.output_format = resolve_settings(None, None, app.state)
-    _save_or_plan(app, "undo local session change")
+    _change_session(
+        app,
+        "undo local session change",
+        lambda persist: app.session_store.undo(app.state, persist=persist),
+    )
 
 
 @session_group.command("redo")
 @click.pass_obj
 def session_redo(app: AppContext) -> None:
     """Redo the last undone local preference change."""
-    try:
-        app.session_store.redo(app.state)
-    except ValueError as exc:
-        _fail(app, str(exc))
-        return
-    app.relay_url, app.output_format = resolve_settings(None, None, app.state)
-    _save_or_plan(app, "redo local session change")
+    _change_session(
+        app,
+        "redo local session change",
+        lambda persist: app.session_store.redo(app.state, persist=persist),
+    )
 
 
 @session_group.command("reset")
 @click.pass_obj
 def session_reset(app: AppContext) -> None:
     """Reset saved relay and format preferences."""
-    app.session_store.reset(app.state)
-    app.relay_url, app.output_format = resolve_settings(None, None, app.state)
-    _save_or_plan(app, "reset local session")
+    _change_session(
+        app,
+        "reset local session",
+        lambda persist: app.session_store.reset(app.state, persist=persist),
+    )
 
 
 @session_group.command("path")
@@ -453,6 +513,40 @@ for _group in NATIVE_GROUPS:
     cli.add_command(_make_proxy(_group))
 
 
+_REPL_FLAG_OPTIONS = {"--json", "--dry-run"}
+_REPL_VALUE_OPTIONS = {
+    "--session",
+    "--relay",
+    "--format",
+    "--buzz-binary",
+    "--timeout",
+}
+
+
+def _repl_command_name(tokens: Sequence[str]) -> str | None:
+    """Return the nested command, None for global-only input, or '' on parse errors."""
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "--":
+            return tokens[index + 1] if index + 1 < len(tokens) else None
+        if token in _REPL_FLAG_OPTIONS:
+            index += 1
+            continue
+        if token in _REPL_VALUE_OPTIONS:
+            if index + 1 >= len(tokens):
+                return ""
+            index += 2
+            continue
+        if any(token.startswith(f"{option}=") for option in _REPL_VALUE_OPTIONS):
+            index += 1
+            continue
+        if token.startswith("-"):
+            return ""
+        return token
+    return None
+
+
 @cli.command("repl")
 @click.pass_obj
 def repl(app: AppContext) -> None:
@@ -461,17 +555,7 @@ def repl(app: AppContext) -> None:
     skin = ReplSkin("buzz", version=__version__, history_file=str(history_path))
     skin.print_banner()
     skin.info("Credentials stay in BUZZ_PRIVATE_KEY and BUZZ_AUTH_TAG.")
-    prompt_session = skin.create_prompt_session()
-    base_args = ["--session", str(app.session_store.path)]
-    if app.use_json:
-        base_args.append("--json")
-    if app.relay_url:
-        base_args.extend(["--relay", app.relay_url])
-    base_args.extend(["--format", app.output_format])
-    if app.dry_run:
-        base_args.append("--dry-run")
-    if app.buzz_binary:
-        base_args.extend(["--buzz-binary", app.buzz_binary])
+    prompt_session = skin.create_prompt_session() if sys.stdin.isatty() else None
     while True:
         try:
             line = skin.get_input(
@@ -499,22 +583,91 @@ def repl(app: AppContext) -> None:
             continue
         try:
             tokens = shlex.split(line)
-            cli.main(
+            command_name = _repl_command_name(tokens)
+            if command_name is None:
+                skin.error("Enter a command after the global options")
+                continue
+            if command_name == "repl":
+                skin.error("The REPL cannot be opened from inside itself")
+                continue
+            base_args = ["--session", str(app.session_store.path)]
+            if app.use_json:
+                base_args.append("--json")
+            if app.requested_relay:
+                base_args.extend(["--relay", app.requested_relay])
+            if app.requested_format:
+                base_args.extend(["--format", app.requested_format])
+            if app.dry_run:
+                base_args.append("--dry-run")
+            if app.buzz_binary:
+                base_args.extend(["--buzz-binary", app.buzz_binary])
+            base_args.extend(["--timeout", str(app.timeout)])
+            exit_code = cli.main(
                 args=[*base_args, *tokens],
                 prog_name="cli-anything-buzz",
                 standalone_mode=False,
             )
+            if exit_code:
+                skin.error(f"Command exited with status {exit_code}")
+            if command_name == "session" and not app.dry_run:
+                app.requested_relay = None
+                app.requested_format = None
         except ValueError as exc:
             skin.error(f"Parse error: {exc}")
+        except click.Abort:
+            skin.warning("Command interrupted")
         except click.ClickException as exc:
             skin.error(exc.format_message())
         except click.exceptions.Exit as exc:
             if exc.exit_code:
                 skin.error(f"Command exited with status {exc.exit_code}")
+        try:
+            app.state = app.session_store.load()
+            app.relay_url, app.output_format = resolve_settings(
+                app.requested_relay,
+                app.requested_format,
+                app.state,
+            )
+        except (OSError, ValueError) as exc:
+            skin.error(f"Could not reload the Buzz session: {exc}")
 
 
 def main() -> None:
-    cli()
+    use_json = "--json" in sys.argv[1:]
+    try:
+        exit_code = cli.main(standalone_mode=False)
+    except click.UsageError as exc:
+        temp = AppContext(
+            use_json=use_json,
+            dry_run=False,
+            session_store=SessionStore(),
+            state=SessionState(),
+            relay_url=None,
+            output_format="json",
+            buzz_binary=None,
+            timeout=DEFAULT_BUZZ_TIMEOUT,
+        )
+        try:
+            _fail(temp, exc.format_message(), exit_code=1)
+        except click.exceptions.Exit as wrapper_exit:
+            raise SystemExit(wrapper_exit.exit_code) from None
+    except click.Abort:
+        temp = AppContext(
+            use_json=use_json,
+            dry_run=False,
+            session_store=SessionStore(),
+            state=SessionState(),
+            relay_url=None,
+            output_format="json",
+            buzz_binary=None,
+            timeout=DEFAULT_BUZZ_TIMEOUT,
+        )
+        try:
+            _fail(temp, "Aborted", exit_code=1)
+        except click.exceptions.Exit as wrapper_exit:
+            raise SystemExit(wrapper_exit.exit_code) from None
+    if exit_code:
+        raise SystemExit(exit_code)
 
 
 if __name__ == "__main__":

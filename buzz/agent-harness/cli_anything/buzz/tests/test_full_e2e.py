@@ -36,7 +36,11 @@ def test_real_backend_root_inventory_matches_wrapper() -> None:
 
 def test_real_backend_validates_synthetic_persona_pack(tmp_path: Path) -> None:
     pack = make_persona_pack(tmp_path)
-    result = run_buzz(build_native_args("pack", ["validate", str(pack)], relay_url=None, output_format="json"))
+    result = run_buzz(
+        build_native_args(
+            "pack", ["validate", str(pack)], relay_url=None, output_format="json"
+        )
+    )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "Valid."
     print(f"\n  Validated persona pack: {pack}")
@@ -44,7 +48,11 @@ def test_real_backend_validates_synthetic_persona_pack(tmp_path: Path) -> None:
 
 def test_real_backend_inspects_resolved_persona_pack(tmp_path: Path) -> None:
     pack = make_persona_pack(tmp_path)
-    result = run_buzz(build_native_args("pack", ["inspect", str(pack)], relay_url=None, output_format="json"))
+    result = run_buzz(
+        build_native_args(
+            "pack", ["inspect", str(pack)], relay_url=None, output_format="json"
+        )
+    )
     assert result.returncode == 0, result.stderr
     assert "Pack: CLI Anything Buzz Test" in result.stdout
     assert "Version: 1.2.3" in result.stdout
@@ -55,7 +63,11 @@ def test_real_backend_inspects_resolved_persona_pack(tmp_path: Path) -> None:
 
 def test_real_backend_rejects_invalid_persona_pack(tmp_path: Path) -> None:
     pack = make_persona_pack(tmp_path, valid=False)
-    result = run_buzz(build_native_args("pack", ["validate", str(pack)], relay_url=None, output_format="json"))
+    result = run_buzz(
+        build_native_args(
+            "pack", ["validate", str(pack)], relay_url=None, output_format="json"
+        )
+    )
     assert result.returncode == 1
     error = json.loads(result.stderr.splitlines()[-1])
     assert error["error"] == "user_error"
@@ -70,13 +82,24 @@ class TestCLISubprocess:
         args: list[str],
         *,
         check: bool = True,
+        env: dict[str, str] | None = None,
+        input_text: str | None = None,
     ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [*self.CLI_BASE, *args],
             capture_output=True,
             text=True,
             check=check,
+            env=env,
+            input=input_text,
         )
+
+    @staticmethod
+    def _fake_buzz(tmp_path: Path, body: str = 'printf "%s\\n" "$*"') -> Path:
+        script = tmp_path / "buzz"
+        script.write_text(f"#!/bin/sh\n{body}\n", encoding="utf-8")
+        script.chmod(0o755)
+        return script
 
     def test_installed_cli_help_lists_all_domains(self) -> None:
         result = self._run(["--help"])
@@ -87,9 +110,7 @@ class TestCLISubprocess:
 
     def test_installed_cli_backend_status_is_secret_safe(self, tmp_path: Path) -> None:
         session = tmp_path / "session.json"
-        result = self._run(
-            ["--session", str(session), "--json", "backend", "status"]
-        )
+        result = self._run(["--session", str(session), "--json", "backend", "status"])
         data = json.loads(result.stdout)
         assert data["ok"] is True
         assert Path(data["executable"]).is_file()
@@ -112,6 +133,41 @@ class TestCLISubprocess:
         reloaded = json.loads(self._run([*prefix, "session", "status"]).stdout)
         assert reloaded["saved"]["relay_url"] == "https://relay.example.com"
         assert reloaded["saved"]["output_format"] == "compact"
+
+    def test_installed_cli_session_reset(self, tmp_path: Path) -> None:
+        session = tmp_path / "session.json"
+        prefix = ["--session", str(session), "--json"]
+        self._run([*prefix, "session", "set-format", "compact"])
+        reset = json.loads(self._run([*prefix, "session", "reset"]).stdout)
+        assert reset["saved"] == {"relay_url": None, "output_format": "json"}
+
+    def test_concurrent_session_updates_are_not_lost(self, tmp_path: Path) -> None:
+        session = tmp_path / "session.json"
+        session_args = ["--session", str(session), "--json", "session"]
+        prefix = [*self.CLI_BASE, *session_args]
+        processes = [
+            subprocess.Popen(
+                [*prefix, "set-relay", "https://relay.example.com"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            ),
+            subprocess.Popen(
+                [*prefix, "set-format", "compact"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            ),
+        ]
+        for process in processes:
+            _, stderr = process.communicate(timeout=10)
+            assert process.returncode == 0, stderr
+        saved = json.loads(self._run([*session_args, "status"]).stdout)
+        assert saved["saved"] == {
+            "relay_url": "https://relay.example.com",
+            "output_format": "compact",
+        }
+        assert saved["undo_depth"] == 2
 
     def test_installed_cli_dry_run_does_not_contact_relay(
         self,
@@ -178,3 +234,91 @@ class TestCLISubprocess:
         assert "synthetic-secret" not in result.stderr
         data = json.loads(result.stderr)
         assert "BUZZ_AUTH_TAG" in data["error"]["message"]
+
+    def test_usage_error_is_structured_json_with_input_exit_code(self) -> None:
+        result = self._run(["--json", "--unknown-option"], check=False)
+        assert result.returncode == 1
+        data = json.loads(result.stderr)
+        assert data["ok"] is False
+        assert data["exit_code"] == 1
+        assert "No such option" in data["error"]["message"]
+
+    def test_native_timeout_is_structured_json(self, tmp_path: Path) -> None:
+        script = self._fake_buzz(tmp_path, "sleep 2")
+        result = self._run(
+            [
+                "--json",
+                "--buzz-binary",
+                str(script),
+                "--timeout",
+                "0.01",
+                "raw",
+                "messages",
+                "get",
+            ],
+            check=False,
+        )
+        assert result.returncode == 4
+        data = json.loads(result.stderr)
+        assert data["exit_code"] == 4
+        assert "timed out" in data["error"]["message"]
+
+    def test_raw_and_backend_help_forward_unchanged(self, tmp_path: Path) -> None:
+        script = self._fake_buzz(tmp_path)
+        common = ["--buzz-binary", str(script)]
+        raw = self._run([*common, "raw", "future-group", "--flag", "value"])
+        assert "future-group --flag value" in raw.stdout
+        help_result = self._run([*common, "backend", "help", "messages"])
+        assert "messages --help" in help_result.stdout
+
+    def test_default_repl_handles_global_only_and_refreshes_session(
+        self, tmp_path: Path
+    ) -> None:
+        script = self._fake_buzz(tmp_path)
+        session = tmp_path / "session.json"
+        result = self._run(
+            ["--session", str(session), "--buzz-binary", str(script)],
+            input_text=(
+                "--json\nrepl\nsession set-format compact\nraw messages get\nquit\n"
+            ),
+        )
+        combined = result.stdout + result.stderr
+        assert "global options" in combined
+        assert "cannot be opened from inside itself" in combined
+        assert combined.count("cli-anything · Buzz") == 1
+        assert "--format compact messages get" in combined
+
+    def test_session_write_failure_is_structured_json(self, tmp_path: Path) -> None:
+        not_directory = tmp_path / "not-a-directory"
+        not_directory.write_text("block", encoding="utf-8")
+        result = self._run(
+            [
+                "--json",
+                "--session",
+                str(not_directory / "session.json"),
+                "session",
+                "set-format",
+                "compact",
+            ],
+            check=False,
+        )
+        assert result.returncode == 1
+        data = json.loads(result.stderr)
+        assert data["ok"] is False
+        assert data["error"]["error"] == "wrapper_error"
+
+    def test_raw_rejects_url_embedded_credentials(self) -> None:
+        result = self._run(
+            [
+                "--json",
+                "--dry-run",
+                "raw",
+                "messages",
+                "get",
+                "--relay",
+                "https://user:secret@relay.example.com",
+            ],
+            check=False,
+        )
+        assert result.returncode == 1
+        assert "secret" not in result.stderr

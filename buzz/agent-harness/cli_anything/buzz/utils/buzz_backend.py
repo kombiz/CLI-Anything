@@ -17,6 +17,8 @@ Build it from the Buzz source:
   cd buzz
   cargo install --path crates/buzz-cli
 """
+DEFAULT_BUZZ_TIMEOUT = 60.0
+BUZZ_TIMEOUT_ENV = "CLI_ANYTHING_BUZZ_TIMEOUT"
 
 
 @dataclass(frozen=True)
@@ -38,7 +40,9 @@ def find_buzz(
         candidate = Path(requested).expanduser()
         if candidate.is_file() and os.access(candidate, os.X_OK):
             return str(candidate.resolve())
-        raise RuntimeError(f"Buzz executable is not usable: {candidate}\n\n{INSTALL_HELP}")
+        raise RuntimeError(
+            f"Buzz executable is not usable: {candidate}\n\n{INSTALL_HELP}"
+        )
     discovered = shutil.which("buzz")
     if discovered:
         return str(Path(discovered).resolve())
@@ -54,6 +58,18 @@ def run_buzz(
     environ: Mapping[str, str] | None = None,
 ) -> BackendResult:
     binary = find_buzz(executable, environ=environ)
+    if timeout is None:
+        env = os.environ if environ is None else environ
+        configured = env.get(BUZZ_TIMEOUT_ENV)
+        if configured:
+            try:
+                timeout = float(configured)
+            except ValueError as exc:
+                raise RuntimeError(f"{BUZZ_TIMEOUT_ENV} must be a number") from exc
+            if timeout <= 0:
+                raise RuntimeError(f"{BUZZ_TIMEOUT_ENV} must be greater than zero")
+        else:
+            timeout = DEFAULT_BUZZ_TIMEOUT
     completed = subprocess.run(
         [binary, *args],
         input=input_text,
@@ -89,8 +105,12 @@ def parse_root_commands(help_text: str) -> list[str]:
     return commands
 
 
-def native_command_inventory(executable: str | None = None) -> tuple[str, list[str]]:
-    result = run_buzz(["--help"], executable=executable)
+def native_command_inventory(
+    executable: str | None = None,
+    *,
+    timeout: float | None = None,
+) -> tuple[str, list[str]]:
+    result = run_buzz(["--help"], executable=executable, timeout=timeout)
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or "buzz --help failed")
     return result.executable, parse_root_commands(result.stdout)
