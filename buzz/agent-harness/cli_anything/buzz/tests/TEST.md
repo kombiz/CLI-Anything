@@ -2,8 +2,8 @@
 
 ## Test Inventory Plan
 
-- `test_core.py`: 26 unit tests planned.
-- `test_full_e2e.py`: 12 real-backend and installed-command tests planned.
+- `test_core.py`: 33 unit tests planned.
+- `test_full_e2e.py`: 20 real-backend and installed-command tests planned.
 
 ## Unit Test Plan
 
@@ -19,6 +19,9 @@
 - Persist with the locked JSON writer.
 - Ensure serialized state contains no private key or auth tag fields.
 - Resolve command-line, session, environment, and native defaults in precedence order.
+- Reject malformed history/future entries before undo or redo.
+- Cap persisted undo/redo history at 100 snapshots.
+- Preserve concurrent read-modify-write updates with atomic replacement.
 
 ### `core/commands.py` — 9 tests
 
@@ -42,6 +45,7 @@
 - Pass standard input through for Buzz commands that accept `-`.
 - Preserve Buzz exit codes, stdout, and stderr.
 - Parse the native root help into a command inventory.
+- Apply the default timeout and allow an explicit timeout override.
 
 ## E2E Test Plan
 
@@ -76,6 +80,12 @@ set a working directory.
   content.
 - Verify forwarded private-key and auth-tag flags are rejected with instructions
   to use environment variables.
+- Verify Click usage failures use exit code 1 and a JSON envelope under `--json`.
+- Verify native timeouts use exit code 4 and a structured JSON error.
+- Verify `raw`, `backend help`, and `session reset` forwarding.
+- Drive the default REPL over stdin, including global-only input, session changes,
+  raw forwarding, and clean exit without recursive REPL entry.
+- Verify session write failures remain structured under `--json`.
 
 ## Realistic Workflow Scenarios
 
@@ -217,3 +227,25 @@ cli_anything/buzz/tests/test_full_e2e.py::TestCLISubprocess::test_installed_cli_
   Redis, and synthetic credentials.
 - No preview bundle is tested because the harness does not expose a preview
   producer.
+
+## Review Remediation Results
+
+Command:
+
+```bash
+python -m pytest agent-harness/cli_anything/buzz/tests -q
+```
+
+Output:
+
+```text
+.....................................................                    [100%]
+53 passed
+```
+
+The added coverage exercises structured Click failures, native timeouts, raw
+and backend-help forwarding, session reset and write failures, malformed and
+bounded history, concurrent updates, credential-bearing raw relay URLs, and the
+piped default REPL including interruption recovery, its global-only recursion
+guard, and session refresh. Native help drift and the backend's omitted-timeout
+default are also covered directly.

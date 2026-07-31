@@ -130,6 +130,11 @@ Buzz's native exit codes are preserved:
 - `4`: other backend error
 - `5`: write conflict
 
+Wrapper validation errors use exit `1`, including Click option/argument errors.
+Native invocations time out after 60 seconds by default and return wrapper exit
+`4`; override the bound with `--timeout SECONDS` or
+`CLI_ANYTHING_BUZZ_TIMEOUT`.
+
 ## Sessions
 
 The default path is `~/.cli-anything-buzz/session.json`. Override it with
@@ -143,7 +148,9 @@ cli-anything-buzz session path
 ```
 
 Undo and redo affect local preferences only. Remote Buzz mutations are never
-claimed to be reversible.
+claimed to be reversible. History and redo stacks retain the latest 100
+snapshots. Session updates are locked as one read-modify-write transaction so
+concurrent wrapper processes do not overwrite one another.
 
 ## Tests
 

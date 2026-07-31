@@ -173,6 +173,11 @@ Failure envelopes are written to stderr. Preserve native Buzz exit semantics:
 - `4` other backend failure
 - `5` write conflict
 
+The wrapper bounds each native call to 60 seconds. Set `--timeout SECONDS` or
+`CLI_ANYTHING_BUZZ_TIMEOUT` when a command needs a different unattended runtime
+bound. A timeout produces a structured wrapper error with exit `4`; wrapper
+option and argument errors use exit `1` and remain JSON under `--json`.
+
 Do not blindly retry exit `2` after a non-idempotent command: Buzz may report an
 unknown delivery outcome. Inspect the native structured error first.
 
