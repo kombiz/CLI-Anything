@@ -1,0 +1,30 @@
+name: Publish personal-fork repository book
+
+on:
+  push:
+    branches: [personal/main]
+    paths:
+      - .plan/book.json
+      - .plan/diagram.json
+      - .plan/history.json
+      - .plan/tasks.json
+      - .github/workflows/repobook.yml
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: [self-hosted, development]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download official Devhub publishing kit
+        run: |
+          curl --fail --silent --show-error --location \
+            https://apps.onlyarag.com/devhub/how-to-publish/devhub-publish.zip \
+            --output "${RUNNER_TEMP}/devhub-publish.zip"
+          unzip -q "${RUNNER_TEMP}/devhub-publish.zip" -d "${RUNNER_TEMP}/devhub-publish"
+      - name: Publish the landed personal integration revision
+        env:
+          DEVHUB_HUB_INTAKE: ${{ runner.temp }}/devhub-publish/devhub-publish/hub-intake.mjs
+        run: node "${RUNNER_TEMP}/devhub-publish/devhub-publish/repobook-autopublish.mjs" . --force

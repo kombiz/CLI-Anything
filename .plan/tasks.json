@@ -1,0 +1,40 @@
+{
+  "schema": "repobook-tasks/1",
+  "project": "kombiz/CLI-Anything personal fork",
+  "tasks": [
+    {
+      "id": "CLIANY-FORK-001",
+      "title": "Define personal fork boundaries",
+      "status": "done",
+      "deps": [],
+      "notes": "Landed on personal/main as commit 5719252; FORK_POLICY.md and PERSONAL_CLIS.json are authoritative."
+    },
+    {
+      "id": "CLIANY-FORK-002",
+      "title": "Synchronize upstream main into personal/main",
+      "status": "todo",
+      "deps": ["CLIANY-FORK-001"],
+      "blocked_by": [],
+      "notes": "On 2026-08-23 personal/main was one fork-policy commit ahead and 15 upstream commits behind main. Preserve fork-policy-owned paths during the reviewed merge."
+    },
+    {
+      "id": "CLIANY-FORK-003",
+      "title": "Integrate the reviewed Buzz harness",
+      "status": "todo",
+      "deps": ["CLIANY-FORK-002"],
+      "blocked_by": [],
+      "notes": "personal/buzz contains the implemented and reviewed harness; integrate only after the upstream synchronization task."
+    },
+    {
+      "id": "CLIANY-FORK-004",
+      "title": "Reconcile Pages workflow credential delivery",
+      "status": "blocked",
+      "deps": ["CLIANY-FORK-001"],
+      "blocked_by": [
+        "operator decision on whether the fork retains the upstream DigitalOcean Spaces upload",
+        "trusted-context immutable-reference lookup"
+      ],
+      "notes": "DO_SPACES_KEY and DO_SPACES_SECRET are CI consumers. The 2026-08-23 prompt-exposed agent context could not run secretctl locate, so no .homelab-secrets.yaml was fabricated."
+    }
+  ]
+}
