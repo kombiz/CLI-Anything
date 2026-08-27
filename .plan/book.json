@@ -1,0 +1,60 @@
+{
+  "schema": "repobook/1",
+  "repo": "kombiz/CLI-Anything",
+  "title": "CLI-Anything — personal fork",
+  "goal": "Keep a low-drift personal integration fork of CLI-Anything that can absorb upstream improvements while carrying explicitly inventoried Kombiz-owned CLI harnesses.",
+  "updated": {
+    "at": "2026-08-23",
+    "by": "Codex",
+    "sources": ["session"]
+  },
+  "state": {
+    "plain": "CLI-Anything is a large upstream collection of command-line harnesses that make desktop and server software usable by agents. This fork keeps upstream code on a clean `main` mirror and reserves `personal/main` plus inventoried topic branches for Kombiz-owned additions.",
+    "summary": "The personal integration branch contains the explicit fork policy but is 15 upstream commits behind the clean mirror and one fork-policy commit ahead. Its personal CLI inventory is empty, while a completed Buzz topic branch has not yet been integrated. The Pages workflow consumes DigitalOcean Spaces credentials through GitHub Actions secrets, but immutable homelab-secrets references could not be resolved from the untrusted agent context. Registry identity remains unmatched because the similarly named Greymatter entry does not identify a GitHub repository.",
+    "narrative": [
+      "The upstream project provides many independently packaged harnesses, root skill mirrors, a CLI-Hub registry, and a GitHub Pages publishing pipeline. Because most paths remain upstream-owned, the fork policy makes ownership explicit instead of treating every file in the fork as locally authored.",
+      "The clean `main` branch follows upstream. Personal changes start from `personal/main`, live on a focused `personal/<slug>` branch, and merge back only after review. `PERSONAL_CLIS.json` is the authoritative list of paths owned by the fork; it is intentionally empty on the current integration branch.",
+      "A Buzz harness has been implemented and reviewed on `personal/buzz`, but it has not been merged into `personal/main`. Upstream has also advanced by 15 commits since the integration branch was created. The safe order is to sync upstream into `personal/main`, resolve only documented ownership conflicts, and then integrate Buzz."
+    ]
+  },
+  "blockers": [
+    {
+      "id": "pages-credential-delivery",
+      "what": "The upstream deploy-pages workflow consumes DO_SPACES_KEY and DO_SPACES_SECRET (plus bucket and endpoint settings) from GitHub Actions secrets. No consumer manifest exists, and secretctl locate correctly refused to run without a trusted supervisor context.",
+      "needs": "Locate the approved CI references from a trusted context and decide whether this fork should inherit, replace, or disable the upstream Spaces upload.",
+      "severity": "medium",
+      "since": "2026-08-23",
+      "steps": [
+        "Decide whether kombiz/CLI-Anything should run the upstream DigitalOcean Spaces upload at all.",
+        "From an approved trusted execution context, run: secretctl locate DO_SPACES_KEY",
+        "From the same context, run: secretctl locate DO_SPACES_SECRET",
+        "If the upload remains enabled, create a complete value-free .homelab-secrets.yaml with the actual ci_job and ci_oidc delivery boundary.",
+        "Run: secretctl consumer-manifest --file .homelab-secrets.yaml",
+        "Verify CI presence and delivery without printing values."
+      ]
+    },
+    {
+      "id": "registry-identity",
+      "what": "Greymatter has a CLI-Anything entry for a 72-command bare directory at /opt/stacks/CLI-Anything, but the entry has no GitHub identity. The estate audit therefore correctly leaves this checkout unmatched.",
+      "needs": "Confirm whether the registered tool collection and this GitHub fork are the same project before assigning CLIANY identity here.",
+      "severity": "low",
+      "since": "2026-08-23",
+      "steps": [
+        "Compare the registered /opt/stacks/CLI-Anything inventory with this fork without changing either authority.",
+        "Decide whether the Greymatter entry represents this repository, a generated deployment, or a separate tool collection.",
+        "If they are the same project, patch Greymatter through its reviewed registry workflow and regenerate projections.",
+        "Only after that lands, update this chapter with the confirmed identifier."
+      ]
+    }
+  ],
+  "prompts": {
+    "next": "Work in the kombiz/CLI-Anything fork. Read AGENTS.md and FORK_POLICY.md first. Take CLIANY-FORK-002 only: fetch upstream, fast-forward the clean main mirror, merge main into personal/main, resolve conflicts according to the ownership table, and stop after the reviewed integration change is pushed. Do not modify upstream-owned behavior, integrate personal/buzz in the same change, add a Greymatter identifier, or create secret references. Verify ancestry with `git merge-base --is-ancestor main personal/main` and run checks for every conflicted path.",
+    "goal": "Keep main cleanly synchronized with upstream, keep all fork-only work explicitly inventoried and reviewed through personal/main, and preserve public-repository safety. Update the four .plan files when fork state changes and publish only the exact landed personal/main revision."
+  },
+  "links": [
+    {"label": "Personal fork", "url": "https://github.com/kombiz/CLI-Anything", "kind": "code"},
+    {"label": "Upstream project", "url": "https://github.com/HKUDS/CLI-Anything", "kind": "code"},
+    {"label": "CLI-Hub", "url": "https://hkuds.github.io/CLI-Anything/", "kind": "live"}
+  ],
+  "starred": []
+}

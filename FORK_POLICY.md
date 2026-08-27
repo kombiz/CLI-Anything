@@ -44,14 +44,16 @@ an accidental direct push to the canonical project.
 Treat files in this order:
 
 1. **Upstream-owned:** every file inherited from `HKUDS/CLI-Anything`.
-2. **Fork-policy-owned:** `FORK_POLICY.md`, `PERSONAL_CLIS.json`, and the
-   `Personal fork safety` block in `.gitignore`.
+2. **Fork-policy-owned:** `FORK_POLICY.md`, `PERSONAL_CLIS.json`, root
+   `AGENTS.md`, `.plan/`, `.github/workflows/repobook.yml`, and the `Personal
+   fork safety` block in `.gitignore`.
 3. **Personal-CLI-owned:** only paths explicitly listed in
    `PERSONAL_CLIS.json`.
 
-A path not listed as personal is upstream-owned even when it is modified on
-`personal/main`. Keep upstream modifications minimal so updates remain easy to
-merge. Do not relabel an existing upstream harness as personal.
+A path not listed as personal or fork-policy-owned is upstream-owned even when
+it is modified on `personal/main`. Keep upstream modifications minimal so
+updates remain easy to merge. Do not relabel an existing upstream harness as
+personal.
 
 ## Adding a personal CLI
 

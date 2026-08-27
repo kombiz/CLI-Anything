@@ -356,6 +356,12 @@ assets/gen_typing_gif.py
 # its harness. Keep machine-local data in one of the ignored locations below.
 # These rules are defense in depth; always inspect `git diff --cached`.
 # ============================================================
+!/AGENTS.md
+!/.plan/
+!/.plan/book.json
+!/.plan/diagram.json
+!/.plan/history.json
+!/.plan/tasks.json
 **/.env
 **/.env.*
 !**/.env.example

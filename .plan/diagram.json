@@ -1,0 +1,23 @@
+{
+  "schema": "repobook-diagram/1",
+  "title": "Personal fork integration flow",
+  "nodes": [
+    {"id": "upstream", "label": "HKUDS upstream", "sub": "canonical project", "col": 0, "row": 0, "kind": "actor"},
+    {"id": "main", "label": "main", "sub": "clean synchronization mirror", "col": 1, "row": 0, "kind": "infra"},
+    {"id": "personal", "label": "personal/main", "sub": "fork integration authority", "col": 2, "row": 0, "kind": "core"},
+    {"id": "topics", "label": "personal topics", "sub": "one reviewed CLI per branch", "col": 1, "row": 1, "kind": "actor"},
+    {"id": "inventory", "label": "PERSONAL_CLIS.json", "sub": "fork-owned path inventory", "col": 2, "row": 1, "kind": "store"},
+    {"id": "harnesses", "label": "CLI harnesses", "sub": "upstream plus personal paths", "col": 3, "row": 0, "kind": "core"},
+    {"id": "hub", "label": "CLI-Hub / Pages", "sub": "upstream publishing workflow", "col": 4, "row": 0, "kind": "infra"},
+    {"id": "book", "label": "Repobook", "sub": "personal/main landed revisions", "col": 3, "row": 1, "kind": "store"}
+  ],
+  "edges": [
+    {"from": "upstream", "to": "main", "label": "fast-forward"},
+    {"from": "main", "to": "personal", "label": "merge upstream"},
+    {"from": "topics", "to": "personal", "label": "reviewed merge"},
+    {"from": "inventory", "to": "personal"},
+    {"from": "personal", "to": "harnesses"},
+    {"from": "harnesses", "to": "hub", "style": "dashed"},
+    {"from": "personal", "to": "book"}
+  ]
+}

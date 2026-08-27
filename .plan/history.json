@@ -1,0 +1,26 @@
+{
+  "schema": "repobook-history/1",
+  "narrative": "The repository began as the HKUDS CLI-Anything project and is retained here as a public personal fork. On 2026-07-23, the fork added an explicit branch and ownership policy so upstream synchronization could remain separate from Kombiz-owned harness work. A Buzz harness was subsequently built and reviewed on its own branch. The 2026-08-23 surface rollout added root agent authority and a structured repository chapter while preserving the rule that fork-only changes land through personal/main, never the clean upstream mirror.",
+  "entries": [
+    {
+      "date": "2026-08-23",
+      "summary": "Added evidence-backed fork authority, Repobook state, and landed-revision publishing without assigning an ambiguous registry identity.",
+      "detail": [
+        "Made root AGENTS.md point to FORK_POLICY.md and preserve the main versus personal/main boundary.",
+        "Added all four Repobook files with the current upstream divergence, empty landed personal inventory, and pending Buzz integration stated explicitly.",
+        "Installed a Repobook workflow for personal/main because main is reserved for clean upstream synchronization.",
+        "Recorded the DigitalOcean Spaces CI handoff as manual-required after trusted secretctl locate was unavailable; no project UUID or secret reference was guessed.",
+        "Kept the similarly named Greymatter entry separate because it has no GitHub identity and describes a bare deployed tool collection."
+      ],
+      "verify": "git branch ancestry and rev-list counts; FORK_POLICY.md; PERSONAL_CLIS.json; canonical Greymatter projects.yaml; repository surface audit; JSON and policy validation recorded on the review branch.",
+      "source": "session"
+    },
+    {
+      "date": "2026-07-23",
+      "summary": "Defined the personal fork's branch, ownership, and public-data boundaries.",
+      "detail": ["Commit 5719252 added FORK_POLICY.md, PERSONAL_CLIS.json, and the personal-fork safety ignore rules."],
+      "verify": "git show --stat 5719252",
+      "source": "log-sweep"
+    }
+  ]
+}
