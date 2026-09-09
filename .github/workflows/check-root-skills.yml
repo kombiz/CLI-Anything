@@ -21,7 +21,7 @@ on:
 
 jobs:
   validate-root-skills:
-    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork && '["ubuntu-latest"]' || '["self-hosted","onlyarag-cli-anything-x64"]') }}
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && '["ubuntu-latest"]' || '["self-hosted","onlyarag-cli-anything-x64"]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
