@@ -10,7 +10,7 @@ on:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, onlyarag-cli-anything-x64]
     permissions:
       id-token: write  # required for trusted publishing
     steps:

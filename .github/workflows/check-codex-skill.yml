@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   test-installer:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork && '["ubuntu-latest"]' || '["self-hosted","onlyarag-cli-anything-x64"]') }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
